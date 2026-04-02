@@ -3,8 +3,11 @@
 import { motion, useScroll, useTransform, useMotionValue, useSpring } from "framer-motion";
 import { useEffect } from "react";
 
-export default function Overlay() {
-  const { scrollYProgress } = useScroll();
+export default function Overlay({ containerRef }: { containerRef?: React.RefObject<HTMLDivElement | null> }) {
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"]
+  });
   
   // Parallax Text Animations based on scroll
   const centerOpacity = useTransform(scrollYProgress, [0, 0.1, 0.2], [1, 1, 0]);

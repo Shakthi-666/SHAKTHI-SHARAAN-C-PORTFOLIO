@@ -3,11 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useScroll, useTransform, useMotionValueEvent } from "framer-motion";
 
-const FRAME_COUNT = 120;
+const FRAME_COUNT = 240;
 
-export default function ScrollyCanvas() {
+export default function ScrollyCanvas({ containerRef }: { containerRef?: React.RefObject<HTMLDivElement | null> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { scrollYProgress } = useScroll();
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"]
+  });
   const [images, setImages] = useState<HTMLImageElement[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -75,13 +78,19 @@ export default function ScrollyCanvas() {
       if (canvasRef.current) {
         canvasRef.current.width = window.innerWidth;
         canvasRef.current.height = window.innerHeight;
-        renderFrame(Math.round(frameIndex.get()));
+        let index = Math.round(frameIndex.get());
+        if (isNaN(index) || index < 1) index = 1;
+        if (index > FRAME_COUNT) index = FRAME_COUNT;
+        renderFrame(index);
       }
     };
     window.addEventListener("resize", handleResize);
-    handleResize(); // init
+    
+    // Slight delay to ensure parent dimensions are stable
+    setTimeout(handleResize, 50);
+    
     return () => window.removeEventListener("resize", handleResize);
-  }, [loaded]);
+  }, [loaded, images]);
 
   useMotionValueEvent(frameIndex, "change", (latest) => {
     // Use requestAnimationFrame for smooth drawing
