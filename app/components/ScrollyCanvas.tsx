@@ -5,7 +5,13 @@ import { useScroll, useTransform, useMotionValueEvent } from "framer-motion";
 
 const FRAME_COUNT = 240;
 
-export default function ScrollyCanvas({ containerRef }: { containerRef?: React.RefObject<HTMLDivElement | null> }) {
+interface ScrollyCanvasProps {
+  containerRef?: React.RefObject<HTMLDivElement | null>;
+  onLoaded?: (progress: number) => void;
+  onProgress?: (progress: number) => void;
+}
+
+export default function ScrollyCanvas({ containerRef, onLoaded, onProgress }: ScrollyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -14,11 +20,10 @@ export default function ScrollyCanvas({ containerRef }: { containerRef?: React.R
   const [images, setImages] = useState<HTMLImageElement[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // Map scroll progress (0 to 1) to frame index (1 to 120)
+  // Map scroll progress (0 to 1) to frame index (1 to FRAME_COUNT)
   const frameIndex = useTransform(scrollYProgress, [0, 1], [1, FRAME_COUNT]);
 
   useEffect(() => {
-    // Preload images
     const loadedImages: HTMLImageElement[] = [];
     let loadedCount = 0;
 
@@ -28,8 +33,22 @@ export default function ScrollyCanvas({ containerRef }: { containerRef?: React.R
       img.src = `/sequence/ezgif-frame-${frameNumber}.png`;
       img.onload = () => {
         loadedCount++;
+        // Report progress (0–100)
+        const progress = Math.round((loadedCount / FRAME_COUNT) * 100);
+        onProgress?.(progress);
         if (loadedCount === FRAME_COUNT) {
           setLoaded(true);
+          onLoaded?.(100);
+        }
+      };
+      img.onerror = () => {
+        // Count failures too so we don't stall
+        loadedCount++;
+        const progress = Math.round((loadedCount / FRAME_COUNT) * 100);
+        onProgress?.(progress);
+        if (loadedCount === FRAME_COUNT) {
+          setLoaded(true);
+          onLoaded?.(100);
         }
       };
       loadedImages.push(img);
@@ -43,10 +62,9 @@ export default function ScrollyCanvas({ containerRef }: { containerRef?: React.R
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const img = images[index - 1]; // 1-indexed to 0-indexed
+    const img = images[index - 1];
     if (!img) return;
 
-    // object-fit: cover logic
     const canvasRatio = canvas.width / canvas.height;
     const imgRatio = img.width / img.height;
 
@@ -56,17 +74,14 @@ export default function ScrollyCanvas({ containerRef }: { containerRef?: React.R
     let offsetY = 0;
 
     if (canvasRatio > imgRatio) {
-      // Canvas is wider than image
       drawHeight = canvas.width / imgRatio;
       offsetY = (canvas.height - drawHeight) / 2;
     } else {
-      // Canvas is taller than image
       drawWidth = canvas.height * imgRatio;
       offsetX = (canvas.width - drawWidth) / 2;
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Draw with slight smoothing
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
@@ -85,23 +100,24 @@ export default function ScrollyCanvas({ containerRef }: { containerRef?: React.R
       }
     };
     window.addEventListener("resize", handleResize);
-    
-    // Slight delay to ensure parent dimensions are stable
     setTimeout(handleResize, 50);
-    
     return () => window.removeEventListener("resize", handleResize);
   }, [loaded, images]);
 
   useMotionValueEvent(frameIndex, "change", (latest) => {
-    // Use requestAnimationFrame for smooth drawing
     requestAnimationFrame(() => renderFrame(Math.round(latest)));
   });
 
   return (
     <div className="absolute inset-0 pointer-events-none">
+      {/* Shimmer skeleton while loading */}
+      {!loaded && (
+        <div className="absolute inset-0 shimmer" />
+      )}
       <canvas
         ref={canvasRef}
         className="block w-full h-screen object-cover"
+        style={{ opacity: loaded ? 1 : 0, transition: "opacity 0.5s ease" }}
       />
     </div>
   );
